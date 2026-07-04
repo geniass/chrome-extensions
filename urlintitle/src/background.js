@@ -73,6 +73,19 @@ class MessageHandlers {
 
 chrome.runtime.onMessage.addListener(
   (message, sender, sendResponse) => {
-    MessageHandlers[message.name](message).then(sendResponse);
+    const handler = Object.hasOwn(MessageHandlers, message.name)
+        ? MessageHandlers[message.name]
+        : undefined;
+    if (typeof handler !== 'function') {
+      sendResponse(null);
+      return false;
+    }
+    handler(message)
+        .then(sendResponse)
+        .catch(error => {
+          console.error(
+              `urlintitle: message handler '${message.name}' failed`, error);
+          sendResponse(null);
+        });
     return true;  // async response
   });

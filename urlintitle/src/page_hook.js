@@ -18,6 +18,21 @@ let last_formatted_title_suffix = null;
 // The last formatted title after browser post-processing (e.g. trimming).
 let last_postprocessed_title = null;
 
+// Monotonic id of the most recently started update. Used to ignore responses
+// from superseded updates, so out-of-order replies from concurrent, in-flight
+// requests cannot apply a stale formatted title.
+let latest_update_id = 0;
+
+// Memoized LOCATION_FIELDS from the background script. These are static, so
+// they are fetched at most once instead of on every title change.
+let constants_cache = null;
+async function getConstants() {
+  if (!constants_cache) {
+    constants_cache = await chrome.runtime.sendMessage({name: 'get_constants'});
+  }
+  return constants_cache;
+}
+
 
 async function maybeUpdateTitle() {
   const current_title = document.title;
@@ -33,11 +48,12 @@ async function maybeUpdateTitle() {
   last_original_title = current_title;
   last_formatted_title = null;
 
-  await updateTitle();
+  await updateTitle(current_title);
 }
 
-async function updateTitle() {
-  const constants = await chrome.runtime.sendMessage({name: 'get_constants'});
+async function updateTitle(original_title) {
+  const update_id = ++latest_update_id;
+  const constants = await getConstants();
 
   // Explicitly copy the required location fields that Chrome strips out.
   const location_copy = {};
@@ -49,11 +65,31 @@ async function updateTitle() {
     name: 'format_title_update',
     location: location_copy,
     filtering_url: document.location.href,
-    title: last_original_title,
+    title: original_title,
     previous_formatted_title_suffix: last_formatted_title_suffix,
   };
+  let result;
+  try {
+    result = await chrome.runtime.sendMessage(update_msg);
+  } catch (error) {
+    // The message failed (e.g. the extension was reloaded and this content
+    // script is orphaned). Clear the pending marker if we are still the latest
+    // update, so this title is not deduped forever and a retry can proceed.
+    if (update_id === latest_update_id) {
+      last_original_title = null;
+    }
+    return;
+  }
+
+  // Ignore stale responses: a newer update started while this one was pending.
+  if (update_id !== latest_update_id) {
+    return;
+  }
+
+  // This is the latest update: clear the pending-original marker so that if the
+  // page later resets the title to this same value, it gets reprocessed.
   last_original_title = null;
-  const result = await chrome.runtime.sendMessage(update_msg);
+
   if (!result) {
     return;
   }

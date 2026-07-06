@@ -1,7 +1,7 @@
 import {normalizeTitle} from './title_lib.js';
 
 const DEFAULT_OPTIONS = {
-  format: '{title} - {protocol}://{hostname}{port}/',
+  format: '{title} @ {group} - {protocol}://{hostname}{port}/',
   url_filter_is_whitelist: false,
   url_filter_regexps: [],
 };

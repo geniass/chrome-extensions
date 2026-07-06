@@ -1,6 +1,13 @@
 import * as Options from './options_lib.js';
 import {formatPageTitle, formatUsesGroup} from './title_lib.js';
 
+// Set to true (then reload the extension at chrome://extensions) to log title
+// and tab-group activity to the service worker console. Off by default.
+const DEBUG = false;
+function debug(...args) {
+  if (DEBUG) console.log('urlintitle[bg]:', ...args);
+}
+
 /**
  * Returns whether the given URL passes the filter (whitelist or blacklist).
  */
@@ -35,6 +42,7 @@ async function getTabGroupName(format, sender) {
       return '';
     }
     const group = await chrome.tabGroups.get(tab.groupId);
+    debug('resolved group for tab', tabId, '->', JSON.stringify(group.title));
     return group.title || '';
   } catch (error) {
     console.error('urlintitle: failed to resolve tab group name', error);
@@ -94,6 +102,7 @@ class MessageHandlers {
   static async format_title_update(message, sender) {
     const options = await Options.getOptions();
     if (!shouldProcessUrl(options, message.filtering_url)) {
+      debug('skipped (filtered URL)', message.filtering_url);
       return null;
     }
     const group = await getTabGroupName(options.format, sender);
@@ -105,6 +114,8 @@ class MessageHandlers {
           group: group,
         },
         message.previous_formatted_title_suffix);
+    debug('format', JSON.stringify(message.title), '+ group',
+        JSON.stringify(group), '->', JSON.stringify(result.formatted_title));
     return result;
   }
 }
@@ -134,6 +145,8 @@ chrome.tabGroups.onUpdated.addListener(async (group) => {
       return;  // The group name is not used in titles; nothing to refresh.
     }
     const tabs = await chrome.tabs.query({groupId: group.id});
+    debug('tabGroups.onUpdated', group.id, JSON.stringify(group.title),
+        '-> refreshing', tabs.length, 'tab(s)');
     await Promise.all(tabs.map(tab =>
         // Ignore tabs with no content script (e.g. chrome:// pages).
         chrome.tabs.sendMessage(tab.id, {name: 'refresh_title'})
@@ -156,6 +169,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     if (!formatUsesGroup(options.format)) {
       return;  // The group name is not used in titles; nothing to refresh.
     }
+    debug('tabs.onUpdated', tabId, 'groupId ->', changeInfo.groupId);
     // Ignore tabs with no content script (e.g. chrome:// pages).
     await chrome.tabs.sendMessage(tabId, {name: 'refresh_title'})
         .catch(() => {});

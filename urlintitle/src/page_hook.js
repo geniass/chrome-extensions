@@ -5,6 +5,13 @@ if (!document.head || document.head.getAttribute('urlintitle') == 'disabled') {
   return;
 }
 
+// Set to true (then reload the page) to log title activity to the page's own
+// DevTools console. Off by default.
+const DEBUG = false;
+function debug(...args) {
+  if (DEBUG) console.log('urlintitle[page]:', ...args);
+}
+
 // The last known title set by the page, before formatting.
 // Reset to null after each update.
 let last_original_title = null;
@@ -114,6 +121,7 @@ async function updateTitle(original_title) {
     document.title = formatted_title;
     last_postprocessed_title = document.title;
     last_formatted_title_suffix = formatted_title_suffix;
+    debug('set title', JSON.stringify(formatted_title));
   }
 }
 
@@ -146,6 +154,7 @@ function registerRefreshListener() {
     const source =
         last_original_title !== null ? last_original_title : last_source_title;
     if (source !== null) {
+      debug('refresh_title from source', JSON.stringify(source));
       updateTitle(source);
     }
   });

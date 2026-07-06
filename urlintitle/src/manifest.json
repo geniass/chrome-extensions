@@ -5,6 +5,7 @@
 
   "description": "Reformats the title of each tab according to its URL.",
   "author": "Guillaume Ryder",
+  "minimum_chrome_version": "99",
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
@@ -27,6 +28,7 @@
   "options_page": "options.html",
 
   "permissions": [
-    "storage"
+    "storage",
+    "tabGroups"
   ]
 }

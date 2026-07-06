@@ -19,6 +19,7 @@ export const LOCATION_FIELDS = {
 export const EXAMPLE_ENV = {
   location: LOCATION_FIELDS,
   title: 'My Example Page',
+  group: 'Work',
 };
 
 

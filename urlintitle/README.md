@@ -17,6 +17,9 @@ Release notes:
 * v3.0.2: added a mechanism to disable the extension (`<head urlintitle="disabled">`); added support for pages that delete the `<title>` element
 * v3.0.1: added icons
 
+## Known issues
+* The title is not re-formatted when a page changes its URL without changing its title, for instance a script that calls `history.pushState()` or `history.replaceState()` to change the query parameters, or that sets `location.hash`. The title keeps showing the old URL until the extension next re-formats it. That happens when the page sets its title, when the tab's group changes or is renamed and, on `claude.ai`, when the session name changes.
+
 ## Metadata
 * Category: Functionality & UI
 * Homepage URL: https://github.com/guilryder/chrome-extensions/tree/main/urlintitle

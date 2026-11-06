@@ -1,11 +1,18 @@
 import * as Options from './options_lib.js';
 import {formatPageTitle, formatUsesGroup} from './title_lib.js';
 
-// Set to true (then reload the extension at chrome://extensions) to log title
-// and tab-group activity to the service worker console. Off by default.
-const DEBUG = false;
+// Mirrors the "debug" option. Refreshed by loadOptions(), so the option takes
+// effect on the next message or tab event without reloading the extension.
+// Logs go to the service worker console.
+let debug_enabled = false;
 function debug(...args) {
-  if (DEBUG) console.log('urlintitle[bg]:', ...args);
+  if (debug_enabled) console.log('urlintitle[bg]:', ...args);
+}
+
+async function loadOptions() {
+  const options = await Options.getOptions();
+  debug_enabled = options.debug;
+  return options;
 }
 
 /**
@@ -103,7 +110,7 @@ class MessageHandlers {
   }
 
   static async format_title_update(message, sender) {
-    const options = await Options.getOptions();
+    const options = await loadOptions();
     if (!shouldProcessUrl(options, message.filtering_url)) {
       debug('skipped (filtered URL)', message.filtering_url);
       return null;
@@ -144,7 +151,7 @@ chrome.tabGroups.onUpdated.addListener(async (group) => {
       return;  // Color/collapse-only update: the group name is unchanged.
     }
     last_group_titles.set(group.id, title);
-    const options = await Options.getOptions();
+    const options = await loadOptions();
     if (!formatUsesGroup(options.format)) {
       return;  // The group name is not used in titles; nothing to refresh.
     }
@@ -169,7 +176,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     return;
   }
   try {
-    const options = await Options.getOptions();
+    const options = await loadOptions();
     if (!formatUsesGroup(options.format)) {
       return;  // The group name is not used in titles; nothing to refresh.
     }

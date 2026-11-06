@@ -5,11 +5,28 @@ if (!document.head || document.head.getAttribute('urlintitle') == 'disabled') {
   return;
 }
 
-// Set to true (then reload the page) to log title activity to the page's own
-// DevTools console. Off by default.
-const DEBUG = false;
+// Mirrors the "debug" option. Logs go to the page's own DevTools console.
+// Content scripts can use chrome.storage directly, so no message to the
+// background script is needed. DEBUG_DEFAULT must match DEFAULT_OPTIONS.debug
+// in options_lib.js. It is also the initial value: the storage read is
+// asynchronous, and logs written before it resolves would be lost if the
+// initial value were false.
+const DEBUG_DEFAULT = true;
+let debug_enabled = DEBUG_DEFAULT;
 function debug(...args) {
-  if (DEBUG) console.log('urlintitle[page]:', ...args);
+  if (debug_enabled) console.log('urlintitle[page]:', ...args);
+}
+try {
+  chrome.storage.sync.get({debug: DEBUG_DEFAULT})
+      .then(options => { debug_enabled = !!options.debug; }, () => {});
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync' && changes.debug) {
+      // newValue is undefined when the options are reset to their defaults.
+      debug_enabled = changes.debug.newValue ?? DEBUG_DEFAULT;
+    }
+  });
+} catch (error) {
+  // The extension was reloaded and this content script is orphaned.
 }
 
 // The last known title set by the page, before formatting.

@@ -4,6 +4,7 @@ const DEFAULT_OPTIONS = {
   format: '{title} @ {group} - {protocol}://{hostname}{port}/',
   url_filter_is_whitelist: false,
   url_filter_regexps: [],
+  debug: true,
 };
 
 // Name to example value.
@@ -29,6 +30,7 @@ function normalizeOptions(options) {
   options.url_filter_is_whitelist = !!options.url_filter_is_whitelist;
   options.url_filter_regexps =
       (options.url_filter_regexps || []).filter(regexp => regexp != '');
+  options.debug = !!options.debug;
 }
 
 export async function getOptions() {

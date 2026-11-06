@@ -36,6 +36,7 @@ async function applyOptions() {
       .checked = true;
   $('url-filter-regexps').value =
       (options.url_filter_regexps || []).join(REGEXPS_SEPARATOR);
+  $('debug').checked = options.debug;
   updateExample();
 }
 
@@ -62,6 +63,7 @@ async function saveOptions() {
     format: $('format').value,
     url_filter_is_whitelist: $('url-filter-type-whitelist').checked,
     url_filter_regexps: url_filter_regexps,
+    debug: $('debug').checked,
   });
   await showOptionsSaved();
 }

@@ -35,6 +35,21 @@ let latest_update_id = 0;
 // from the original title rather than from the already-formatted document.title.
 let last_source_title = null;
 
+// The session name last sent to the background script, used to detect a change
+// that needs a re-format.
+let last_session = '';
+
+// Returns the session name from the Claude Code web header, or '' on any other
+// page. The page also has an unrelated sr-only <h2>Navigation</h2>, so select
+// the rename button by its data attribute rather than by tag alone.
+function getSessionName() {
+  if (location.hostname !== 'claude.ai') {
+    return '';
+  }
+  const button = document.querySelector('h2 > button[data-pane-title]');
+  return button ? button.textContent.trim() : '';
+}
+
 // Memoized LOCATION_FIELDS from the background script. These are static, so
 // they are fetched at most once instead of on every title change.
 let constants_cache = null;
@@ -74,12 +89,15 @@ async function updateTitle(original_title) {
     Object.keys(constants.LOCATION_FIELDS).forEach(
       field => location_copy[field] = document.location[field]);
 
+    last_session = getSessionName();
+
     // Ask the background script to format the title.
     const update_msg = {
       name: 'format_title_update',
       location: location_copy,
       filtering_url: document.location.href,
       title: original_title,
+      session: last_session,
       previous_formatted_title_suffix: last_formatted_title_suffix,
     };
     result = await chrome.runtime.sendMessage(update_msg);
@@ -145,19 +163,51 @@ function registerTitleMutationObserver() {
 // update has at least started, and idempotent when the group name is unchanged.
 function registerRefreshListener() {
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.name !== 'refresh_title') {
-      return;
-    }
-    // Prefer the title of an in-flight page-driven update over the stored
-    // source title: this refresh supersedes that update via latest_update_id,
-    // so re-sending its (newer) input avoids resurrecting the previous title.
-    const source =
-        last_original_title !== null ? last_original_title : last_source_title;
-    if (source !== null) {
-      debug('refresh_title from source', JSON.stringify(source));
-      updateTitle(source);
+    if (message.name === 'refresh_title') {
+      refreshTitle();
     }
   });
+}
+
+function refreshTitle() {
+  // Prefer the title of an in-flight page-driven update over the stored
+  // source title: this refresh supersedes that update via latest_update_id,
+  // so re-sending its (newer) input avoids resurrecting the previous title.
+  const source =
+      last_original_title !== null ? last_original_title : last_source_title;
+  if (source !== null) {
+    debug('refresh_title from source', JSON.stringify(source));
+    updateTitle(source);
+  }
+}
+
+// Re-formats the title when the session name in the page body changes. The
+// page can change it (initial render, navigation to another session, rename)
+// without touching <title>, so the <head> observer does not see it. The check
+// is debounced because the page mutates its body continuously while a
+// response streams.
+const SESSION_CHECK_DELAY_MS = 100;
+
+function registerSessionObserver() {
+  if (location.hostname !== 'claude.ai') {
+    return;
+  }
+  let check_pending = false;
+  new window.MutationObserver(() => {
+    if (check_pending) {
+      return;
+    }
+    check_pending = true;
+    setTimeout(() => {
+      check_pending = false;
+      const session = getSessionName();
+      if (session !== last_session) {
+        debug('session changed', JSON.stringify(session));
+        refreshTitle();
+      }
+    }, SESSION_CHECK_DELAY_MS);
+  }).observe(document.body,
+      {subtree: true, childList: true, characterData: true});
 }
 
 // Register the refresh listener before the first (awaited) update, so a group
@@ -166,5 +216,6 @@ function registerRefreshListener() {
 registerRefreshListener();
 await maybeUpdateTitle();
 registerTitleMutationObserver();
+registerSessionObserver();
 
 })();

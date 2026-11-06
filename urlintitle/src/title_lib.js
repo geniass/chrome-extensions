@@ -46,6 +46,13 @@ export const TAGS = {
         + "are removed, so '<code>{title} - {group}</code>' has no trailing "
         + "'<code> - </code>'.",
   },
+  'session': {
+    compute: (env) => env.session || '',
+    description: "The session name shown in the header of a Claude Code web "
+        + "session (<code>claude.ai/code</code>). Empty on other pages, where "
+        + "the tag and one adjacent separator are removed like "
+        + "'<code>{group}</code>'.",
+  },
 };
 
 const FORMAT_REGEXP =
@@ -65,16 +72,37 @@ export function formatUsesGroup(format) {
   return format.includes(GROUP_TAG);
 }
 
-// Matches {group} together with any separators immediately surrounding it.
-const EMPTY_GROUP_REGEXP = new RegExp(
-    '(' + SEPARATOR + ')?' + GROUP_TAG.replace(/[{}]/g, '\\$&')
-    + '(' + SEPARATOR + ')?', 'gu');
+// Tags that are removed, together with their surrounding separators, when
+// their value is empty.
+const OPTIONAL_TAGS = ['group', 'session'];
+
+// Per optional tag, matches the tag together with any separators immediately
+// surrounding it.
+const EMPTY_TAG_REGEXPS = OPTIONAL_TAGS.map(tag => ({
+  tag,
+  regexp: new RegExp(
+      '(' + SEPARATOR + ')?\\{' + tag + '\\}(' + SEPARATOR + ')?', 'gu'),
+}));
 
 // Bracket-like pairs that may wrap {group}, e.g. '({group})' or '[{group}]'.
 // Used to drop both halves of the pair together instead of leaving an
 // orphaned closer behind.
 const BRACKET_PAIRS =
     {'(': ')', '[': ']', '<': '>', '«': '»', '"': '"', "'": "'"};
+
+// String.replace() callback for EMPTY_TAG_REGEXPS: returns what remains of a
+// match for an optional tag whose value is empty.
+function removeEmptyTag(match, before = '', after = '', offset, string) {
+  // Strip bracket pairs that wrap the tag, so ' ({group}) - ' is treated as
+  // separators ' ' and ' - ' rather than leaving an orphaned ')'.
+  while (before && after && BRACKET_PAIRS[before.at(-1)] === after[0]) {
+    before = before.slice(0, -1);
+    after = after.slice(1);
+  }
+  const content_before = offset > 0;
+  const content_after = offset + match.length < string.length;
+  return (after && content_before && content_after) ? after : '';
+}
 
 export function normalizeTitle(title) {
   return (title || '').trim().replace(/\s+/g, ' ');
@@ -84,31 +112,18 @@ export function normalizeTitle(title) {
  * env: same format as EXAMPLE_ENV
  */
 export function formatPageTitle(format, env) {
-  // When the tab has no group name, remove the {group} tag and its surrounding
-  // separators rather than formatting it to an empty string that would leave a
-  // dangling or doubled separator. If the tag is flanked by real content on
-  // both sides (e.g. '{title} @ {group} - {host}') the trailing separator is
-  // kept ('{title} - {host}'), so a group-specific delimiter before the tag
-  // disappears with it; brackets wrapping the tag (e.g. '{title} ({group}) -
-  // {host}') are dropped as a pair; at an edge (e.g. '{title} - {group}' or
-  // '[{group}]') the tag and its separators are dropped entirely.
-  if (!env.group) {
-    format = format.replace(EMPTY_GROUP_REGEXP,
-        (match, before = '', after = '', offset, string) => {
-          // Strip bracket pairs that wrap the tag, so ' ({group}) - ' is
-          // treated as separators ' ' and ' - ' rather than leaving an
-          // orphaned ')'.
-          while (before && after &&
-              BRACKET_PAIRS[before.at(-1)] === after[0]) {
-            before = before.slice(0, -1);
-            after = after.slice(1);
-          }
-          const content_before = offset > 0;
-          const content_after = offset + match.length < string.length;
-          return (after && content_before && content_after)
-              ? after
-              : '';
-        });
+  // When an optional tag (e.g. {group}) has no value, remove it and its
+  // surrounding separators rather than formatting it to an empty string that
+  // would leave a dangling or doubled separator. If the tag is flanked by real
+  // content on both sides (e.g. '{title} @ {group} - {host}') the trailing
+  // separator is kept ('{title} - {host}'), so a tag-specific delimiter before
+  // the tag disappears with it; brackets wrapping the tag (e.g. '{title}
+  // ({group}) - {host}') are dropped as a pair; at an edge (e.g. '{title} -
+  // {group}' or '[{group}]') the tag and its separators are dropped entirely.
+  for (const {tag, regexp} of EMPTY_TAG_REGEXPS) {
+    if (!env[tag]) {
+      format = format.replace(regexp, removeEmptyTag);
+    }
   }
   return normalizeTitle(format.replace(FORMAT_REGEXP,
       (format, tag) => TAGS[tag].compute(env)));

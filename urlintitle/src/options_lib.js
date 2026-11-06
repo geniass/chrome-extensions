@@ -20,6 +20,7 @@ export const EXAMPLE_ENV = {
   location: LOCATION_FIELDS,
   title: 'My Example Page',
   group: 'Work',
+  session: 'Refactor login flow',
 };
 
 

@@ -45,7 +45,10 @@ async function getTabGroupName(format, sender) {
     debug('resolved group for tab', tabId, '->', JSON.stringify(group.title));
     return group.title || '';
   } catch (error) {
-    console.error('urlintitle: failed to resolve tab group name', error);
+    // A tab or group can disappear between the page sending its message and this
+    // lookup running (e.g. the tab was closed). That race is expected, so log it
+    // quietly rather than as an error.
+    debug('failed to resolve tab group name for tab', tabId, error);
     return '';
   }
 }
@@ -112,6 +115,7 @@ class MessageHandlers {
           location: message.location,
           title: message.title,
           group: group,
+          session: message.session || '',
         },
         message.previous_formatted_title_suffix);
     debug('format', JSON.stringify(message.title), '+ group',
